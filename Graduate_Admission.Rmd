@@ -1,0 +1,87 @@
+---
+title: "P3"
+author: "xy"
+date: '2020-02-26'
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(skimr)
+library(tidyverse)
+library(dplyr)
+library(MASS)
+```
+
+```{r}
+admission <- read.csv("Admission_Predict_Ver1.1.csv")
+admission_data <- admission %>%
+  select(Chance.of.Admit, Research, University.Rating, CGPA) %>%
+  rename(Admission_Rate = Chance.of.Admit, University_Rating = University.Rating, Undergraduate_GPA = CGPA)
+```
+
+
+## summary statistics
+```{r}
+skimr::skim(admission_data)
+admission_data$Research <- as.factor(admission_data$Research)
+admission_data$University_Rating <- as.factor(admission_data$University_Rating)
+admission_data$Research %>% table()
+admission_data$University_Rating %>% table()
+```
+There are no missing values in our dataset. Here, we need to treat Research and University_Rating as factors. Research = 0 means no research experience; Research = 1 means having research experience. University_Rating is the whole number, which ranges from 1 to 5. Here, University_rating refers to the applicant's undergraduate university. 
+
+We will split the prices dataset to 70% of training and 30% of test sets. We want to make sure that the training set and the test set do not have any common data points.
+```{r}
+set.seed(340)
+rn_train <- sample(nrow(admission_data), floor(nrow(admission_data)*0.7))
+train <- admission_data[rn_train,]
+test <- admission_data[-rn_train,]
+```
+
+## Models
+```{r}
+full_model <- lm(Admission_Rate~.,data=train)
+stepB <- stepAIC(full_model, direction= "backward", trace=TRUE)
+summary(stepB)
+```
+Here, we use 'backward' elimination to construct the model, which will start with the full model. We end up using all the variables. Thus, it suggests that we should keep Research, University_Rating and Undergraduate_GPA in our model. In addition, Adjusted R-squared is 0.8 which also confirms that our model is adequate. Also, for the variable University_Rating, we find that University_Rating5 (i.e. undergraduate university rating = 5) is statistically significant. In other words, students whose undergraduate university rating are the highest tend to be easier to be get admitted. 
+
+## Calculate accuracy of the model
+```{r}
+prediction <- predict(full_model, newdata =test) 
+errors <- prediction - test$Admission_Rate
+rmse <- sqrt(mean((test$Admission_Rate - prediction)^2))
+rmse
+rel_change <- abs(errors) / test$Admission_Rate
+pred1 <- table(rel_change<0.25)["TRUE"] / nrow(test) 
+pred1
+```
+"rmse = 0.06" means that the square root of the variance of the residuals is 0.06. The lower value of RMSE indicats better fit. In addition, "pred1 = 0.97" means that the percentage of cases with less than 25% error is 0.97. Accroding to the output, we can say that our predictions are robust. 
+
+## Check Model Assumptions
+```{r}
+plot(full_model$fitted.values, full_model$residuals, col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residuals", main = "Data from full_model")
+abline(h = 0, col = "darkorange", lwd = 2)
+```
+The first plot is fitted vs residuals plot.We can find that the model is linear (average residuals= 0, almost mirror image around orange line); and the model does not have constant variance. Residuals follow pattern and are not random. 
+
+```{r}
+qqnorm(full_model$residuals, main = "Normal Q-Q Plot, full_model", col = "darkgrey")
+qqline(full_model$residuals, col = "dodgerblue", lwd = 2)
+```
+The second plot is Q_Q plot. We can find that the middle part of the normal probability plot of residuals approximately follow a straight line, which indicates that normality assumption does not hold.
+
+```{r}
+plot(full_model,5)
+```
+The third plot is Residuals vs leverage. In our graph, we only detect two points 10, 66 are outliers and no influentials as Cook's distance dashed red lines do not show.
+
+
